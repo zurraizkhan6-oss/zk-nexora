@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# After you know your final domain, replace YOUR-DOMAIN.com and uncomment:
+# Sitemap: https://YOUR-DOMAIN.com/sitemap.xml
