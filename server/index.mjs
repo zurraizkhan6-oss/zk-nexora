@@ -319,4 +319,4 @@ const server = http.createServer(async (req, res) => {
   return send(res, 404, { error: "Not found." }, origin);
 });
 
-server.listen(PORT, () => console.log(`ZK NEXORA API listening on http://localhost:${PORT}`));
+server.listen(PORT, "0.0.0.0" , () => console.log(`ZK NEXORA API listening on port ${PORT}`));
