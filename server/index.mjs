@@ -2,6 +2,7 @@
  * ZK NEXORA — optional secure backend (zero dependencies, Node 18+).
  *
  *   POST /api/contact  → validates, rate-limits, then emails you via Resend (https://resend.com)
+ *   POST /api/audit    → Free Website Audit request; same protections, emailed via Resend
  *   POST /api/chat     → proxies to any OpenAI-compatible chat API using a SERVER-SIDE key
  *   GET  /api/health   → { ok: true }
  *
@@ -125,8 +126,12 @@ async function handleContact(req, res, origin) {
         subject: `New ZK NEXORA enquiry — ${v.service}`,
         html:
           `<h2>New website enquiry</h2>` +
-          `<p><b>Name:</b> ${escapeHtml(v.name)}<br><b>Email:</b> ${escapeHtml(v.email)}<br>` +
-          `<b>Company:</b> ${escapeHtml(v.company || "—")}<br><b>Service:</b> ${escapeHtml(v.service)}<br>` +
+          `<p><b>Name:</b> ${escapeHtml(v.name)}
+<b>Email:</b> ${escapeHtml(v.email)}
+` +
+          `<b>Company:</b> ${escapeHtml(v.company || "—")}
+<b>Service:</b> ${escapeHtml(v.service)}
+` +
           `<b>Budget:</b> ${escapeHtml(v.budget || "—")}</p><p style="white-space:pre-wrap">${escapeHtml(v.message)}</p>`,
       }),
     });
@@ -138,6 +143,107 @@ async function handleContact(req, res, origin) {
   } catch (e) {
     console.error("Contact delivery failed:", e?.message);
     return send(res, 502, { error: "Could not deliver message." }, origin);
+  }
+}
+
+/* ---------- /api/audit (Free Website Audit) ---------- */
+const AUDIT_AREAS = ["Design", "SEO", "Speed", "Mobile", "Overall"];
+
+/**
+ * Checks that the submitted website address is a plausible public http(s) URL.
+ * Returns { href, host } or null. The server NEVER requests this URL — it is only
+ * validated and then shown (HTML-escaped) in the email.
+ */
+function normalizeWebsiteUrl(raw) {
+  const t = typeof raw === "string" ? raw.trim() : "";
+  if (!t || t.length > 2048 || /\s/.test(t)) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
+  let u;
+  try {
+    u = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  if (u.username || u.password) return null;
+  const host = u.hostname.toLowerCase();
+  if (!host.includes(".") || host.startsWith("[") || host.endsWith(".local")) return null;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return null;
+  if ((host.split(".").pop() || "").length < 2) return null;
+  return { href: u.toString(), host };
+}
+
+function validateAudit(b) {
+  const site = normalizeWebsiteUrl(b.websiteUrl);
+  const areas = Array.isArray(b.auditAreas) ? [...new Set(b.auditAreas.filter((a) => AUDIT_AREAS.includes(a)))] : [];
+  const v = {
+    name: str(b.name, 100),
+    email: str(b.email, 254),
+    websiteUrl: site ? site.href : "",
+    host: site ? site.host : "",
+    businessType: str(b.businessType, 120),
+    areas,
+    details: str(b.details, 3000),
+  };
+  const errors = {};
+  if (v.name.length < 2) errors.name = "invalid";
+  if (!EMAIL_RE.test(v.email)) errors.email = "invalid";
+  if (!site) errors.websiteUrl = "invalid";
+  // header-injection guard
+  if (/[\r\n]/.test(v.name + v.email)) errors.name = "invalid";
+  return { v, errors };
+}
+
+async function handleAudit(req, res, origin) {
+  const ip = clientIp(req);
+  if (rateLimited(`audit:${ip}`, 5, 15 * 60_000)) return send(res, 429, { error: "Too many requests." }, origin);
+
+  let body;
+  try {
+    body = await readJson(req);
+  } catch (e) {
+    if (e.code === 413) res.on("finish", () => req.destroy());
+    return send(res, e.code || 400, { error: "Invalid request." }, origin);
+  }
+
+  if (body.website) return send(res, 400, { error: "Invalid request." }, origin); // honeypot (if client sends it)
+
+  const { v, errors } = validateAudit(body);
+  if (Object.keys(errors).length) return send(res, 422, { error: "Validation failed.", fields: Object.keys(errors) }, origin);
+
+  if (!env.RESEND_API_KEY || !env.CONTACT_TO_EMAIL || !env.CONTACT_FROM_EMAIL) {
+    // Honest: nothing is sent, and we say so.
+    return send(res, 503, { error: "Email delivery is not configured on the server." }, origin);
+  }
+
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: env.CONTACT_FROM_EMAIL,
+        to: [env.CONTACT_TO_EMAIL],
+        reply_to: v.email,
+        subject: `Free Website Audit request — ${v.host}`,
+        html:
+          `<h2>New Free Website Audit request</h2>` +
+          `<p><b>Name:</b> ${escapeHtml(v.name)}<br>` +
+          `<b>Email:</b> ${escapeHtml(v.email)}<br>` +
+          `<b>Website:</b> ${escapeHtml(v.websiteUrl)}<br>` +
+          `<b>Business type:</b> ${escapeHtml(v.businessType || "—")}<br>` +
+          `<b>Audit requirements:</b> ${escapeHtml(v.areas.length ? v.areas.join(", ") : "Not specified")}</p>` +
+          `<p><b>Additional details:</b></p>` +
+          `<p style="white-space:pre-wrap">${escapeHtml(v.details || "—")}</p>`,
+      }),
+    });
+    if (!r.ok) {
+      console.error("Resend error status (audit):", r.status);
+      return send(res, 502, { error: "Could not deliver request." }, origin);
+    }
+    return send(res, 200, { ok: true }, origin);
+  } catch (e) {
+    console.error("Audit delivery failed:", e?.message);
+    return send(res, 502, { error: "Could not deliver request." }, origin);
   }
 }
 
@@ -208,6 +314,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === "GET" && url === "/api/health") return send(res, 200, { ok: true }, origin);
   if (req.method === "POST" && url === "/api/contact") return handleContact(req, res, origin);
+  if (req.method === "POST" && url === "/api/audit") return handleAudit(req, res, origin);
   if (req.method === "POST" && url === "/api/chat") return handleChat(req, res, origin);
   return send(res, 404, { error: "Not found." }, origin);
 });

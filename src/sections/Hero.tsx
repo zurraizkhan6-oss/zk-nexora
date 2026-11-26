@@ -83,6 +83,13 @@ export function Hero() {
             <Button variant="ghost" onClick={() => goToContact()} className="w-full sm:w-auto">
               Start a Project
             </Button>
+            <Button
+  variant="ghost"
+  onClick={() => goToContact()}
+  className="w-full sm:w-auto"
+>
+  Free Website Audit <Sparkles className="h-4 w-4" />
+</Button>
           </motion.div>
 
           <motion.ul

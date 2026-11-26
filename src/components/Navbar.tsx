@@ -2,13 +2,33 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X, ArrowUpRight } from "lucide-react";
 import { Logo } from "./Logo";
-import { navLinks } from "@/lib/config";
+import { navLinks, siteConfig } from "@/lib/config";
 import { cn } from "@/utils/cn";
+
+
+/**
+ * "Let's Talk" opens WhatsApp using the number and message from src/lib/config.ts.
+ * If no WhatsApp number is configured, the buttons fall back to the #contact section.
+ */
+const whatsappHref = siteConfig.whatsappNumber
+  ? `https://wa.me/${siteConfig.whatsappNumber}?text=${encodeURIComponent(siteConfig.whatsappMessage)}`
+  : null;
+
+const talkLinkProps = whatsappHref
+  ? {
+      href: whatsappHref,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      "aria-label": "Let's Talk on WhatsApp (opens in a new tab)",
+    }
+  : { href: "#contact" };
+
 
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [active, setActive] = useState("#home");
+
 
   useEffect(() => {
     const onScroll = () => {
@@ -26,6 +46,7 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -35,6 +56,7 @@ export function Navbar() {
       window.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
 
   return (
     <header
@@ -51,6 +73,7 @@ export function Navbar() {
         <a href="#home" aria-label="ZK NEXORA — home" onClick={() => setOpen(false)}>
           <Logo />
         </a>
+
 
         <ul className="hidden items-center gap-1 lg:flex">
           {navLinks.map((l) => (
@@ -75,9 +98,10 @@ export function Navbar() {
           ))}
         </ul>
 
+
         <div className="flex items-center gap-3">
           <motion.a
-            href="#contact"
+            {...talkLinkProps}
             whileHover={{ y: -2 }}
             whileTap={{ scale: 0.96 }}
             className="hidden items-center gap-1.5 rounded-full bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-8px_rgba(37,99,235,0.8)] transition-shadow hover:shadow-[0_10px_34px_-6px_rgba(124,58,237,0.8)] sm:inline-flex"
@@ -106,6 +130,7 @@ export function Navbar() {
           </button>
         </div>
       </nav>
+
 
       <AnimatePresence>
         {open && (
@@ -143,7 +168,7 @@ export function Navbar() {
               ))}
               <motion.li variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="mt-3">
                 <a
-                  href="#contact"
+                  {...talkLinkProps}
                   onClick={() => setOpen(false)}
                   className="flex items-center justify-center gap-2 rounded-2xl bg-brand-gradient px-5 py-4 text-base font-bold text-white"
                 >

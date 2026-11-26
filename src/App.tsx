@@ -9,7 +9,9 @@ import { About } from "@/sections/About";
 import { Services } from "@/sections/Services";
 import { Portfolio } from "@/sections/Portfolio";
 import { Pricing } from "@/sections/Pricing";
+import { FreeAudit } from "@/sections/FreeAudit";
 import { Contact } from "@/sections/Contact";
+
 
 export default function App() {
   return (
@@ -29,6 +31,7 @@ export default function App() {
         <Services />
         <Portfolio />
         <Pricing />
+        <FreeAudit />
         <Contact />
       </main>
       <Footer />

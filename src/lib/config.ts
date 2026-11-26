@@ -6,13 +6,31 @@
  */
 const env = import.meta.env;
 
+
 const clean = (v?: string) => (v ?? "").trim();
+
+
+/**
+ * Free Website Audit endpoint (public URL only, never a secret).
+ * 1) If VITE_AUDIT_ENDPOINT is set, that exact address is used.
+ * 2) Otherwise, if VITE_CONTACT_ENDPOINT ends in /api/contact (the bundled server/index.mjs),
+ *    the same address ending in /api/audit is used.
+ * 3) Otherwise it stays empty, and the audit form honestly says it is not connected.
+ */
+const deriveAuditEndpoint = () => {
+  const explicit = clean(env.VITE_AUDIT_ENDPOINT);
+  if (explicit) return explicit;
+  const contact = clean(env.VITE_CONTACT_ENDPOINT);
+  return /\/api\/contact\/?$/.test(contact) ? contact.replace(/\/api\/contact\/?$/, "/api/audit") : "";
+};
+
 
 export const siteConfig = {
   name: "ZK NEXORA",
   tagline: "Innovate Today. Build Tomorrow.",
   /** Public site URL, e.g. https://yourdomain.com — used for canonical + Open Graph URLs */
   siteUrl: clean(env.VITE_SITE_URL).replace(/\/$/, ""),
+
 
   founder: {
     name: "Zurraiz Khan",
@@ -24,27 +42,37 @@ export const siteConfig = {
      *  2) set VITE_FOUNDER_PHOTO=/founder/zurraiz.jpg  (or edit the fallback below)
      * Leave empty to show the elegant "ZK" placeholder.
      */
-   photo: clean(env.VITE_FOUNDER_PHOTO) || "/zurraiz.jpg",
+    photo: clean(env.VITE_FOUNDER_PHOTO) || "/zurraiz.jpg",
   },
 
+
   /** International format, digits only (e.g. 15551234567). Leave empty = not configured. */
-whatsappNumber: clean(env.VITE_WHATSAPP_NUMBER || "92306660058").replace(/[^\d]/g, ""),
+  whatsappNumber: clean(env.VITE_WHATSAPP_NUMBER || "92306660058").replace(/[^\d]/g, ""),
   whatsappMessage:
     clean(env.VITE_WHATSAPP_MESSAGE) || "Hello ZK NEXORA, I'd like to talk about a project.",
+
 
   /** Form backend endpoint (Formspree-compatible JSON or the bundled server/index.mjs). */
   contactEndpoint: clean(env.VITE_CONTACT_ENDPOINT),
 
+
+  /** Free Website Audit endpoint (the bundled server/index.mjs → /api/audit). Empty = not configured. */
+  auditEndpoint: deriveAuditEndpoint(),
+
+
   /** Optional AI chat proxy endpoint (see server/index.mjs). Empty = built-in demo assistant. */
   chatApiUrl: clean(env.VITE_CHAT_API_URL),
+
 
   /** Optional public contact email shown in the footer/contact section. Empty = hidden. */
   contactEmail: clean(env.VITE_CONTACT_EMAIL),
 } as const;
 
+
 export const whatsappLink = siteConfig.whatsappNumber
   ? `https://wa.me/${siteConfig.whatsappNumber}?text=${encodeURIComponent(siteConfig.whatsappMessage)}`
   : null;
+
 
 export const navLinks = [
   { label: "Home", href: "#home" },
@@ -52,5 +80,6 @@ export const navLinks = [
   { label: "Services", href: "#services" },
   { label: "Portfolio", href: "#portfolio" },
   { label: "Pricing", href: "#pricing" },
+  { label: "Free Audit", href: "#audit" },
   { label: "Contact", href: "#contact" },
 ] as const;
